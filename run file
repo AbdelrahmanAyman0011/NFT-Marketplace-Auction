@@ -1,0 +1,63 @@
+terminal1
+npx hardhat node
+
+terminal2
+npx hardhat run scripts/deploy.js --network localhost
+
+da el by share l contracts de:
+  npx hardhat run scripts/ERC20.deploy.ts --network localhost
+  npx hardhat run scripts/NFTCollection.deploy.ts --network localhost
+  npx hardhat run scripts/Marketplace.deploy.ts --network localhost
+
+TEST:
+npx hardhat test
+
+da el by test :
+  npx hardhat test test/NFTCollection.test.ts
+  npx hardhat test test/Marketplace.test.ts
+
+3ayz atfa3k m3 l contracts direct:
+
+npx hardhat console --network localhost
+
+then:
+const Marketplace = await ethers.getContractFactory("Marketplace");
+const marketplace = await Marketplace.deploy("My Marketplace");
+await marketplace.deployed();
+console.log("Marketplace address:", marketplace.address);
+
+1. للاتصال بـ عقد موجود مسبقًا (مثل NFTCollection):
+javascript
+const NFTCollection = await ethers.getContractFactory("NFTCollection");
+const nft = await NFTCollection.attach("0x...العنوان_القديم...");
+await nft.name(); // التأكد من الاتصال
+2. لنشر عقد جديد (إذا أردت نسخة جديدة):
+javascript
+const ERC20 = await ethers.getContractFactory("ERC20");
+const token = await ERC20.deploy("1000000", "MyToken", "MTK");
+await token.deployed();
+
+
+الخطوات الصحيحة للتفاعل:
+جلب جميع العقود المنشورة مسبقًا:
+
+javascript
+const Marketplace = await ethers.getContractAt("Marketplace", "0x5FbDB...");
+const NFTCollection = await ethers.getContractAt("NFTCollection", "0x...");
+const ERC20 = await ethers.getContractAt("ERC20", "0x...");
+
+
+التفاعل معها:
+
+javascript
+// مثال: سك NFT جديد
+await NFTCollection.mintNFT("My Art", "ipfs://Qm...");
+
+// مثال: إنشاء مزاد
+await Marketplace.createAuction(
+  NFTCollection.address, // عنوان عقد NFT
+  ERC20.address,         // عنوان عقد Token
+  0,                     // NFT ID
+  100,                   // السعر الابتدائي
+  Math.floor(Date.now() / 1000) + 3600 // انتهاء بعد ساعة
+);
