@@ -10,7 +10,7 @@ contract Marketplace is IERC721Receiver {
     // Name of the marketplace
     string public name;
 
-    // Index of auctions
+    // Index of auctions  مزاد
     uint256 public index = 0;
 
     // Structure to define auction properties
@@ -57,7 +57,7 @@ contract Marketplace is IERC721Receiver {
     // creator of an auction
     event NFTRefunded(uint256 auctionIndex, uint256 nftId, address claimedBy);
 
-    // constructor of the contract
+    // constructor of the contract بيحدد اسم السوق لما ننشر العقد
     constructor(string memory _name) {
         name = _name;
     }
