@@ -4,89 +4,99 @@ import { ethers } from "hardhat";
 
 /**
  * Deploy a Marketplace contract
+ * Returns: 
+ *  - Marketplace: The deployed marketplace contract instance
+ *  - owner: The contract deployer (default signer)
+ *  - USER1, USER2: Additional test accounts
  */
 async function deployNFTMarketplaceFixture() {
-  const [owner, USER1, USER2] = await ethers.getSigners();
-  const MarketplaceFactory = await ethers.getContractFactory("Marketplace");
-  const Marketplace = await MarketplaceFactory.deploy("My NFT Marketplace");
+  const [owner, USER1, USER2] = await ethers.getSigners(); // Gets test accounts from hardhat
+  const MarketplaceFactory = await ethers.getContractFactory("Marketplace"); // Creates factory for contract deployment
+  const Marketplace = await MarketplaceFactory.deploy("My NFT Marketplace"); // Deploys with marketplace name parameter
 
   return { Marketplace, owner, USER1, USER2 };
 }
 
 /**
- * Deply Marketplace, NFT Collection, Payment Token contracts,
- * and mint 1 NFT
+ * Deploy Marketplace, NFT Collection, Payment Token contracts and mint 1 NFT
+ * Returns:
+ *  - Marketplace: The deployed marketplace contract
+ *  - NFTCollection: Deployed NFT contract 
+ *  - PaymentToken: Deployed ERC20 token contract for payments
+ *  - owner, USER1, USER2: Test accounts
  */
 async function deployFixture1() {
   const { Marketplace, owner, USER1, USER2 } =
     await deployNFTMarketplaceFixture();
 
   const NFTCollectionFactory = await ethers.getContractFactory("NFTCollection");
-  const NFTCollection = await NFTCollectionFactory.deploy();
+  const NFTCollection = await NFTCollectionFactory.deploy(); // Deploy NFT collection contract
 
   const PaymentTokenFactory = await ethers.getContractFactory("ERC20");
   const PaymentToken = await PaymentTokenFactory.deploy(
-    1000000,
-    "Test Token",
-    "XTS"
+    1000000, // Initial token supply
+    "Test Token", // Token name
+    "XTS" // Token symbol
   );
-  await NFTCollection.mintNFT("Test NFT", "test.uri.domain.io");
+  await NFTCollection.mintNFT("Test NFT", "test.uri.domain.io"); // Mint a test NFT with name and URI
   return { Marketplace, NFTCollection, PaymentToken, owner, USER1, USER2 };
 }
 
 /**
- * Deploy Marketplace, NFTCollection, Payment Token contracts, 
- * mint 1 NFT
- * and Create new auction 
+ * Deploy contracts, mint NFT, and create an auction
+ * Returns marketplace setup with an active auction:
+ *  - All contracts and accounts from deployFixture1
+ *  - NFT approved for marketplace to transfer
+ *  - Auction already created with NFT ID 0
  */
 async function deployFixture2() {
   const { Marketplace, NFTCollection, PaymentToken, owner, USER1, USER2 } =
     await deployFixture1();
-  // Approve NFT transfer by the marketplace
+  
+  // Approve NFT transfer by the marketplace for token ID 0
   await NFTCollection.approve(Marketplace.address, 0);
 
-  // Create new auction
-  let endAuction = Math.floor(Date.now() / 1000) + 3600;
+  // Create new auction with:
+  let endAuction = Math.floor(Date.now() / 1000) + 3600; // End time 1 hour from now
   await Marketplace.createAuction(
-    NFTCollection.address,
-    PaymentToken.address,
-    0,
-    50,
-    endAuction
+    NFTCollection.address, // NFT contract address
+    PaymentToken.address, // Payment token contract address
+    0, // NFT ID
+    50, // Initial bid price
+    endAuction // Auction end timestamp
   );
   return { Marketplace, NFTCollection, PaymentToken, owner, USER1, USER2 };
 }
 
 /**
- * Deploy Marketplace, NFTCollection, Payment Token contracts,
- * Mint 1 MFT
- * Create Auction
- * Create one BID
- * @returns 
+ * Deploy contracts, create auction, and place a bid
+ * Returns marketplace with auction that has one bid already:
+ *  - All contracts and accounts from deployFixture2
+ *  - USER1 has tokens and has placed a bid of 500 on auction ID 0
  */
 async function deployFixture3() {
   const { Marketplace, NFTCollection, PaymentToken, owner, USER1, USER2 } =
     await deployFixture2();
 
+  // Approve token spending by marketplace for USER1
   await PaymentToken.connect(USER1).approve(Marketplace.address, 10000);
-  // credit USER1 balance with tokens
+  
+  // Credit USER1 balance with tokens from owner
   await PaymentToken.transfer(USER1.address, 10000);
-  // Place new bid with USER1
+  
+  // Place new bid with USER1 on auction 0 with amount 500
   await Marketplace.connect(USER1).bid(0, 500);
 
   return { Marketplace, NFTCollection, PaymentToken, owner, USER1, USER2 };
 }
 
 /**
- * Method to initialize testing environnement before testing
- * claimNFT() and claimToken() function
- * Bellow are the steps that this function will complete
- * 1. Mint Token
- * 2. Approve NFT transfer by market place
- * 3. Create auction
- * 4. Approve token transfer by market place
- * 5. Transfer token to bider
- * 6. Create new bid
+ * Setup for testing claim functions (claimNFT and claimToken)
+ * @param bider - Boolean flag: if true, includes a bid on the auction; if false, creates auction without bids
+ * Returns testing environment for claim functions with:
+ *  - USER1 creates the NFT and the auction
+ *  - USER2 places a bid of 500 (if bider=true)
+ *  - All necessary approvals and transfers set up
  */
 async function claimFunctionSetUp(bider: boolean) {
   const { Marketplace, USER1, USER2 } = await deployNFTMarketplaceFixture();
@@ -95,15 +105,22 @@ async function claimFunctionSetUp(bider: boolean) {
 
   const PaymentTokenFactory = await ethers.getContractFactory("ERC20");
   const PaymentToken = await PaymentTokenFactory.deploy(
-    1000000,
-    "Test Token",
-    "XTS"
+    1000000, // Initial token supply
+    "Test Token", // Token name
+    "XTS" // Token symbol
   );
+  
+  // USER1 mints an NFT
   await NFTCollection.connect(USER1).mintNFT("Test NFT", "test.uri.domain.io");
+  
+  // USER1 approves marketplace for NFT transfer
   await NFTCollection.connect(USER1).approve(Marketplace.address, 0);
 
+  // Get current blockchain timestamp
   const currentTimestamp = await time.latest();
-  let endAuction = currentTimestamp + 3600;
+  let endAuction = currentTimestamp + 3600; // Auction ends 1 hour from now
+  
+  // USER1 creates auction for NFT ID 0 with min price 50
   await Marketplace.connect(USER1).createAuction(
     NFTCollection.address,
     PaymentToken.address,
@@ -112,17 +129,42 @@ async function claimFunctionSetUp(bider: boolean) {
     endAuction
   );
 
+  // If bider flag is true, set up USER2 to place a bid
   if (bider) {
-    // allow marketplace contract to get token
+    // Allow marketplace contract to transfer tokens from USER2
     await PaymentToken.connect(USER2).approve(Marketplace.address, 10000);
-    // credit USER2 balance with tokens
+    
+    // Credit USER2 balance with tokens
     await PaymentToken.transfer(USER2.address, 20000);
-    // place new bid
+    
+    // USER2 places bid of 500 on auction ID 0
     await Marketplace.connect(USER2).bid(0, 500);
   }
   return { Marketplace, NFTCollection, PaymentToken, USER1, USER2 };
 }
 
+// Test specific functions within describe blocks:
+
+// createAuction(nftContract, tokenContract, tokenId, initialPrice, endTime)
+// Creates a new auction for an NFT with specified payment token and parameters
+
+// bid(auctionId, bidAmount)
+// Places a new bid on an existing auction
+
+// claimNFT(auctionId)
+// Allows auction winner to claim their NFT after auction ends
+
+// claimToken(auctionId)
+// Allows auction creator to claim payment tokens after auction ends
+
+// refund(auctionId)
+// Allows auction creator to reclaim NFT if no bids were placed and auction ended
+
+// getCurrentBid(auctionId) 
+// Returns the current highest bid amount for an auction
+
+// getCurrentBidOwner(auctionId)
+// Returns the address of the current highest bidder
 describe("Marketplace contract tests", () => {
   describe("Deployment", () => {
     it("Should set the correct name", async () => {

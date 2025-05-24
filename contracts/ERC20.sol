@@ -1,9 +1,59 @@
 // SPDX-License-Identifier: MIT
+//
+// This is a standard ERC20 token implementation that manages a fungible token with the following functionality:
+//
+// - Interface tokenRecipient: Allows contracts to be notified when tokens are approved
+//   - receiveApproval: Called when a token owner approves tokens for a contract with additional data
+//     Parameters:
+//     - _from: Address that approved the tokens
+//     - _value: Amount of tokens approved
+//     - _token: Address of the token contract
+//     - _extraData: Additional data sent with the approval
+//
+// Functions:
+//   - constructor: Creates token with specified supply, name and symbol
+//     Parameters:
+//     - initialSupply: Number of whole tokens to create (will be multiplied by 10^18)
+//     - tokenName: Name for the token
+//     - tokenSymbol: Symbol/ticker for the token
+//
+//   - _transfer: Internal function handling the core token transfer logic
+//     Parameters:
+//     - _from: Address sending tokens
+//     - _to: Address receiving tokens
+//     - _value: Amount of tokens to transfer
+//
+//   - transfer: Public function for users to send their own tokens
+//     Parameters:
+//     - _to: Recipient address
+//     - _value: Amount to send
+//
+//   - transferFrom: Public function for approved spenders to transfer tokens
+//     Parameters:
+//     - _from: Address that owns the tokens
+//     - _to: Recipient address
+//     - _value: Amount to transfer
+//
+//   - approve: Public function to authorize a spender to use tokens
+//     Parameters:
+//     - _spender: Address being authorized to spend
+//     - _value: Maximum amount they can spend
+//
+// Events:
+//   - Transfer: Emitted when tokens move between addresses
+//   - Approval: Emitted when spending approval is granted
+//
+// This token is used in the NFT Marketplace for bidding on auctions and processing payments.
 
 pragma solidity ^0.8.9;
 
-interface tokenRecipient { 
-    function receiveApproval(address _from, uint256 _value, address _token, bytes calldata _extraData) external; 
+interface tokenRecipient {
+    function receiveApproval(
+        address _from,
+        uint256 _value,
+        address _token,
+        bytes calldata _extraData
+    ) external;
 }
 
 contract ERC20 {
@@ -15,14 +65,18 @@ contract ERC20 {
     uint256 public totalSupply;
 
     // This creates an array with all balances
-    mapping (address => uint256) public balanceOf;
-    mapping (address => mapping (address => uint256)) public allowance;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
 
     // This generates a public event on the blockchain that will notify clients
     event Transfer(address indexed from, address indexed to, uint256 value);
-    
+
     // This generates a public event on the blockchain that will notify clients
-    event Approval(address indexed _owner, address indexed _spender, uint256 _value);
+    event Approval(
+        address indexed _owner,
+        address indexed _spender,
+        uint256 _value
+    );
 
     /**
      * Constructor function
@@ -34,10 +88,10 @@ contract ERC20 {
         string memory tokenName,
         string memory tokenSymbol
     ) {
-        totalSupply = initialSupply * 10 ** uint256(decimals);  // Update total supply with the decimal amount
-        balanceOf[msg.sender] = totalSupply;                // Give the creator all initial tokens
-        name = tokenName;                                   // Set the name for display purposes
-        symbol = tokenSymbol;                               // Set the symbol for display purposes
+        totalSupply = initialSupply * 10 ** uint256(decimals); // Update total supply with the decimal amount
+        balanceOf[msg.sender] = totalSupply; // Give the creator all initial tokens
+        name = tokenName; // Set the name for display purposes
+        symbol = tokenSymbol; // Set the symbol for display purposes
     }
 
     /**
@@ -69,7 +123,10 @@ contract ERC20 {
      * @param _to The address of the recipient
      * @param _value the amount to send
      */
-    function transfer(address _to, uint256 _value) public returns (bool success) {
+    function transfer(
+        address _to,
+        uint256 _value
+    ) public returns (bool success) {
         _transfer(msg.sender, _to, _value);
         return true;
     }
@@ -83,8 +140,12 @@ contract ERC20 {
      * @param _to The address of the recipient
      * @param _value the amount to send
      */
-    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
-        require(_value <= allowance[_from][msg.sender], "Invalid allowance");     // Check allowance
+    function transferFrom(
+        address _from,
+        address _to,
+        uint256 _value
+    ) public returns (bool success) {
+        require(_value <= allowance[_from][msg.sender], "Invalid allowance"); // Check allowance
         allowance[_from][msg.sender] -= _value;
         _transfer(_from, _to, _value);
         return true;
@@ -98,8 +159,10 @@ contract ERC20 {
      * @param _spender The address authorized to spend
      * @param _value the max amount they can spend
      */
-    function approve(address _spender, uint256 _value) public
-        returns (bool success) {
+    function approve(
+        address _spender,
+        uint256 _value
+    ) public returns (bool success) {
         allowance[msg.sender][_spender] = _value;
         emit Approval(msg.sender, _spender, _value);
         return true;

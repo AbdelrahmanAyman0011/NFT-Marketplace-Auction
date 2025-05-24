@@ -1,36 +1,45 @@
 // SPDX-License-Identifier: MIT
+// Specifies the license under which this contract is shared
 
 pragma solidity ^0.8.9;
+// Specifies the version of Solidity compiler
 
 import "./ERC20.sol";
+// Import custom ERC20 token contract
+
 import "./NFTCollection.sol";
+// Import custom ERC721 NFT collection contract
+
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+// Import OpenZeppelin interface to handle receiving ERC721 tokens
 
 contract Marketplace is IERC721Receiver {
-    // Name of the marketplace
+    // Declares the Marketplace contract implementing the IERC721Receiver interface
+
     string public name;
+    // Name of the marketplace
 
-    // Index of auctions  مزاد
     uint256 public index = 0;
+    // Index used to keep track of the number of auctions
 
-    // Structure to define auction properties
     struct Auction {
-        uint256 index; // Auction Index
-        address addressNFTCollection; // Address of the ERC721 NFT Collection contract
-        address addressPaymentToken; // Address of the ERC20 Payment Token contract
-        uint256 nftId; // NFT Id
-        address creator; // Creator of the Auction
-        address payable currentBidOwner; // Address of the highest bider
-        uint256 currentBidPrice; // Current highest bid for the auction
-        uint256 endAuction; // Timestamp for the end day&time of the auction
-        uint256 bidCount; // Number of bid placed on the auction
+        // Structure representing a single auction
+        uint256 index; // Unique ID of the auction
+        address addressNFTCollection; // Address of the NFT collection contract
+        address addressPaymentToken; // Address of the ERC20 token contract used for payment
+        uint256 nftId; // ID of the NFT being auctioned
+        address creator; // Address of the auction creator
+        address payable currentBidOwner; // Address of the current highest bidder
+        uint256 currentBidPrice; // Current highest bid
+        uint256 endAuction; // Timestamp marking the end of the auction
+        uint256 bidCount; // Number of bids received
     }
 
-    // Array will all auctions
     Auction[] private allAuctions;
+    // Array storing all auctions
 
-    // Public event to notify that a new auction has been created
     event NewAuction(
+        // Event emitted when a new auction is created
         uint256 index,
         address addressNFTCollection,
         address addressPaymentToken,
@@ -42,32 +51,25 @@ contract Marketplace is IERC721Receiver {
         uint256 bidCount
     );
 
-    // Public event to notify that a new bid has been placed
     event NewBidOnAuction(uint256 auctionIndex, uint256 newBid);
+    // Event emitted when a new bid is placed
 
-    // Public event to notif that winner of an
-    // auction claim for his reward
     event NFTClaimed(uint256 auctionIndex, uint256 nftId, address claimedBy);
+    // Event emitted when the winner claims the NFT
 
-    // Public event to notify that the creator of
-    // an auction claimed for his money
     event TokensClaimed(uint256 auctionIndex, uint256 nftId, address claimedBy);
+    // Event emitted when the creator claims the payment tokens
 
-    // Public event to notify that an NFT has been refunded to the
-    // creator of an auction
     event NFTRefunded(uint256 auctionIndex, uint256 nftId, address claimedBy);
+    // Event emitted when the NFT is refunded to the creator (no bids)
 
-    // constructor of the contract بيحدد اسم السوق لما ننشر العقد
     constructor(string memory _name) {
+        // Constructor to initialize the marketplace with a name
         name = _name;
     }
 
-    /**
-     * Check if a specific address is
-     * a contract address
-     * @param _addr: address to verify
-     */
     function isContract(address _addr) private view returns (bool) {
+        // Internal helper function to check if an address is a contract
         uint256 size;
         assembly {
             size := extcodesize(_addr)
@@ -75,63 +77,57 @@ contract Marketplace is IERC721Receiver {
         return size > 0;
     }
 
-    /**
-     * Create a new auction of a specific NFT
-     * @param _addressNFTCollection address of the ERC721 NFT collection contract
-     * @param _addressPaymentToken address of the ERC20 payment token contract
-     * @param _nftId Id of the NFT for sale
-     * @param _initialBid Inital bid decided by the creator of the auction
-     * @param _endAuction Timestamp with the end date and time of the auction
-     */
     function createAuction(
+        // Function to create a new auction
         address _addressNFTCollection,
         address _addressPaymentToken,
         uint256 _nftId,
         uint256 _initialBid,
         uint256 _endAuction
     ) external returns (uint256) {
-        //Check is addresses are valid
         require(
             isContract(_addressNFTCollection),
             "Invalid NFT Collection contract address"
         );
+        // Ensure the NFT collection address is a valid contract
+
         require(
             isContract(_addressPaymentToken),
             "Invalid Payment Token contract address"
         );
+        // Ensure the payment token address is a valid contract
 
-        // Check if the endAuction time is valid
         require(_endAuction > block.timestamp, "Invalid end date for auction");
+        // Auction end time must be in the future
 
-        // Check if the initial bid price is > 0
         require(_initialBid > 0, "Invalid initial bid price");
+        // Initial bid must be greater than zero
 
-        // Get NFT collection contract
         NFTCollection nftCollection = NFTCollection(_addressNFTCollection);
+        // Create instance of the NFT collection contract
 
-        // Make sure the sender that wants to create a new auction
-        // for a specific NFT is the owner of this NFT
         require(
             nftCollection.ownerOf(_nftId) == msg.sender,
             "Caller is not the owner of the NFT"
         );
+        // Ensure caller owns the NFT
 
-        // Make sure the owner of the NFT approved that the MarketPlace contract
-        // is allowed to change ownership of the NFT
         require(
             nftCollection.getApproved(_nftId) == address(this),
             "Require NFT ownership transfer approval"
         );
+        // Ensure this contract is approved to transfer the NFT
 
-        // Lock NFT in Marketplace contract
         require(
             nftCollection.transferNFTFrom(msg.sender, address(this), _nftId)
         );
+        // Transfer NFT from owner to marketplace (lock it)
 
-        //Casting from address to address payable
         address payable currentBidOwner = payable(address(0));
-        // Create new Auction object
+        // Initialize highest bidder address to zero
+
         Auction memory newAuction = Auction({
+            // Create a new Auction object
             index: index,
             addressNFTCollection: _addressNFTCollection,
             addressPaymentToken: _addressPaymentToken,
@@ -143,13 +139,12 @@ contract Marketplace is IERC721Receiver {
             bidCount: 0
         });
 
-        //update list
         allAuctions.push(newAuction);
+        // Add new auction to the list
 
-        // increment auction sequence
         index++;
+        // Increment auction index for next auction
 
-        // Trigger event and return index of new auction
         emit NewAuction(
             index,
             _addressNFTCollection,
@@ -161,130 +156,106 @@ contract Marketplace is IERC721Receiver {
             _endAuction,
             0
         );
+        // Emit event to notify new auction creation
+
         return index;
+        // Return new auction index
     }
 
-    /**
-     * Check if an auction is open
-     * @param _auctionIndex Index of the auction
-     */
     function isOpen(uint256 _auctionIndex) public view returns (bool) {
+        // Check whether the auction is still open
         Auction storage auction = allAuctions[_auctionIndex];
         if (block.timestamp >= auction.endAuction) return false;
         return true;
     }
 
-    /**
-     * Return the address of the current highest bider
-     * for a specific auction
-     * @param _auctionIndex Index of the auction
-     */
     function getCurrentBidOwner(
         uint256 _auctionIndex
     ) public view returns (address) {
+        // Returns the address of the current highest bidder
         require(_auctionIndex < allAuctions.length, "Invalid auction index");
         return allAuctions[_auctionIndex].currentBidOwner;
     }
 
-    /**
-     * Return the current highest bid price
-     * for a specific auction
-     * @param _auctionIndex Index of the auction
-     */
     function getCurrentBid(
         uint256 _auctionIndex
     ) public view returns (uint256) {
+        // Returns the current highest bid price
         require(_auctionIndex < allAuctions.length, "Invalid auction index");
         return allAuctions[_auctionIndex].currentBidPrice;
     }
 
-    /**
-     * Place new bid on a specific auction
-     * @param _auctionIndex Index of auction
-     * @param _newBid New bid price
-     */
     function bid(
         uint256 _auctionIndex,
         uint256 _newBid
     ) external returns (bool) {
+        // Place a new bid on an auction
         require(_auctionIndex < allAuctions.length, "Invalid auction index");
         Auction storage auction = allAuctions[_auctionIndex];
 
-        // check if auction is still open
         require(isOpen(_auctionIndex), "Auction is not open");
+        // Ensure auction is open
 
-        // check if new bid price is higher than the current one
         require(
             _newBid > auction.currentBidPrice,
             "New bid price must be higher than the current bid"
         );
+        // New bid must be higher than the current one
 
-        // check if new bider is not the owner
         require(
             msg.sender != auction.creator,
             "Creator of the auction cannot place new bid"
         );
+        // Auction creator cannot place a bid
 
-        // get ERC20 token contract
         ERC20 paymentToken = ERC20(auction.addressPaymentToken);
+        // Load payment token contract
 
-        // new bid is better than current bid!
-
-        // transfer token from new bider account to the marketplace account
-        // to lock the tokens
         require(
             paymentToken.transferFrom(msg.sender, address(this), _newBid),
             "Tranfer of token failed"
         );
+        // Transfer bid tokens to marketplace (lock funds)
 
-        // new bid is valid so must refund the current bid owner (if there is one!)
         if (auction.bidCount > 0) {
             paymentToken.transfer(
                 auction.currentBidOwner,
                 auction.currentBidPrice
             );
         }
+        // Refund previous highest bidder if applicable
 
-        // update auction info
         address payable newBidOwner = payable(msg.sender);
+        // Convert bidder address to payable
+
         auction.currentBidOwner = newBidOwner;
         auction.currentBidPrice = _newBid;
         auction.bidCount++;
+        // Update auction data
 
-        // Trigger public event
         emit NewBidOnAuction(_auctionIndex, _newBid);
+        // Emit event for new bid
 
         return true;
     }
 
-    /**
-     * Function used by the winner of an auction
-     * to withdraw his NFT.
-     * When the NFT is withdrawn, the creator of the
-     * auction will receive the payment tokens in his wallet
-     * @param _auctionIndex Index of auction
-     */
     function claimNFT(uint256 _auctionIndex) external {
+        // Called by auction winner to claim the NFT
         require(_auctionIndex < allAuctions.length, "Invalid auction index");
-
-        // Check if the auction is closed
         require(!isOpen(_auctionIndex), "Auction is still open");
 
-        // Get auction
         Auction storage auction = allAuctions[_auctionIndex];
 
-        // Check if the caller is the winner of the auction
         require(
             auction.currentBidOwner == msg.sender,
             "NFT can be claimed only by the current bid owner"
         );
+        // Only highest bidder can claim the NFT
 
-        // Get NFT collection contract
         NFTCollection nftCollection = NFTCollection(
             auction.addressNFTCollection
         );
-        // Transfer NFT from marketplace contract
-        // to the winner address
+
         require(
             nftCollection.transferNFTFrom(
                 address(this),
@@ -292,78 +263,54 @@ contract Marketplace is IERC721Receiver {
                 _auctionIndex
             )
         );
+        // Transfer the NFT to the winner
 
-        // Get ERC20 Payment token contract
         ERC20 paymentToken = ERC20(auction.addressPaymentToken);
-        // Transfer locked token from the marketplace
-        // contract to the auction creator address
         require(
             paymentToken.transfer(auction.creator, auction.currentBidPrice)
         );
+        // Transfer bid funds to auction creator
 
         emit NFTClaimed(_auctionIndex, auction.nftId, msg.sender);
     }
 
-    /**
-     * Function used by the creator of an auction
-     * to withdraw his tokens when the auction is closed
-     * When the Token are withdrawn, the winned of the
-     * auction will receive the NFT in his walled
-     * @param _auctionIndex Index of the auction
-     */
     function claimToken(uint256 _auctionIndex) external {
-        require(_auctionIndex < allAuctions.length, "Invalid auction index"); // XXX Optimize
-
-        // Check if the auction is closed
+        // Called by creator to claim tokens (alternative to claimNFT)
+        require(_auctionIndex < allAuctions.length, "Invalid auction index");
         require(!isOpen(_auctionIndex), "Auction is still open");
 
-        // Get auction
         Auction storage auction = allAuctions[_auctionIndex];
 
-        // Check if the caller is the creator of the auction
         require(
             auction.creator == msg.sender,
             "Tokens can be claimed only by the creator of the auction"
         );
 
-        // Get NFT Collection contract
         NFTCollection nftCollection = NFTCollection(
             auction.addressNFTCollection
         );
-        // Transfer NFT from marketplace contract
-        // to the winned of the auction
+
         nftCollection.transferFrom(
             address(this),
             auction.currentBidOwner,
             auction.nftId
         );
+        // Transfer NFT to winner
 
-        // Get ERC20 Payment token contract
         ERC20 paymentToken = ERC20(auction.addressPaymentToken);
-        // Transfer locked tokens from the market place contract
-        // to the wallet of the creator of the auction
         paymentToken.transfer(auction.creator, auction.currentBidPrice);
+        // Transfer funds to creator
 
         emit TokensClaimed(_auctionIndex, auction.nftId, msg.sender);
     }
 
-    /**
-     * Function used by the creator of an auction
-     * to get his NFT back in case the auction is closed
-     * but there is no bider to make the NFT won't stay locked
-     * in the contract
-     * @param _auctionIndex Index of the auction
-     */
     function refund(uint256 _auctionIndex) external {
+        // Refund NFT to creator if no bids were placed
         require(_auctionIndex < allAuctions.length, "Invalid auction index");
-
-        // Check if the auction is closed
         require(!isOpen(_auctionIndex), "Auction is still open");
 
-        // Get auction
         Auction storage auction = allAuctions[_auctionIndex];
 
-        // Check if the caller is the creator of the auction
         require(
             auction.creator == msg.sender,
             "Tokens can be claimed only by the creator of the auction"
@@ -373,18 +320,18 @@ contract Marketplace is IERC721Receiver {
             auction.currentBidOwner == address(0),
             "Existing bider for this auction"
         );
+        // Only refund if no bids were placed
 
-        // Get NFT Collection contract
         NFTCollection nftCollection = NFTCollection(
             auction.addressNFTCollection
         );
-        // Transfer NFT back from marketplace contract
-        // to the creator of the auction
+
         nftCollection.transferFrom(
             address(this),
             auction.creator,
             auction.nftId
         );
+        // Transfer NFT back to creator
 
         emit NFTRefunded(_auctionIndex, auction.nftId, msg.sender);
     }
@@ -395,6 +342,7 @@ contract Marketplace is IERC721Receiver {
         uint256,
         bytes memory
     ) public virtual override returns (bytes4) {
+        // Required function to accept ERC721 tokens
         return this.onERC721Received.selector;
     }
 }

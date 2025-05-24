@@ -40,7 +40,11 @@
 \lstset{style=mystyle}
 
 \title{Smart Contract Analysis Report \\ \large OpenSea-Lite NFT Marketplace}
-\author{Abdelrahman Ayman \\ Computer Science, Alexandria National University}
+\author{Abdelrahman Ayman Saad Abdelhalim || 2205033
+\\ Ahmed Mohamed Adel ||||||||| 2205096
+\\ Ahmed Mohamed Bekhet |||||||| 2205136
+\\ Ahmed Sabry Ibrahim||||||||||2205007
+\\ Computer Science, Alexandria National University}
 \date{\today}
 
 \begin{document}
@@ -82,7 +86,7 @@ This report also documents the implementation and analysis of an OpenSea-like NF
 
 \section*{Deployment Evidence}
 GitHub repository (forked and updated): \\
-\url{https://github.com/AbdelrahmanAyman-dev/NFT-Marketplace-Auction} \\
+\url{https://github.com/AbdelrahmanAyman0011/NFT-Marketplace-Auction} \\
 Screenshots and logs of deployment and test execution are included in the repository under the \texttt{screenshots/} folder.
 
 \section{Smart Contract Architecture}
@@ -183,51 +187,186 @@ Limited payment options & Supports any ERC20 token \\
 \caption{Marketplace Problem-Solution Matrix}
 \end{table}
 
-\section{Code Implementation Details}
+\section{All Smart Contract Function Explanations}
 
-\subsection{Core Functions}
+\subsection{Marketplace.sol}
 
-\begin{lstlisting}[language=Solidity,caption={Auction Creation Function}]
+\textbf{createAuction}
+\begin{lstlisting}[language=Solidity]
 function createAuction(
-    address _nftContract,
-    uint256 _tokenId,
-    address _paymentToken,
-    uint256 _endDate,
-    uint256 _startPrice
+address _nftContract,
+uint256 _tokenId,
+address _paymentToken,
+uint256 _endDate,
+uint256 _startPrice
 ) external {
-    require(_endDate > block.timestamp, "Invalid end date");
-    require(_startPrice > 0, "Invalid start price");
-    
-    // Transfer NFT custody to marketplace
-    IERC721(_nftContract).safeTransferFrom(
-        msg.sender,
-        address(this),
-        _tokenId
-    );
-    
-    auctions[auctionIndex] = Auction(
-        _nftContract,
-        _paymentToken,
-        _endDate,
-        _startPrice,
-        address(0),
-        0
-    );
-    
-    auctionIndex++;
-    emit AuctionCreated(auctionIndex - 1, _nftContract, _tokenId);
+require(_endDate > block.timestamp, "Invalid end date");
+require(_startPrice > 0, "Invalid start price");
+
+IERC721(_nftContract).safeTransferFrom(
+    msg.sender,
+    address(this),
+    _tokenId
+);
+
+auctions[_tokenId] = Auction(
+    _nftContract,
+    _paymentToken,
+    _endDate,
+    _startPrice,
+    msg.sender,
+    address(0),
+    0
+);
+
+emit AuctionCreated(_tokenId, _nftContract, _startPrice);
 }
 \end{lstlisting}
+Initializes a new auction by transferring the NFT to the marketplace and setting auction parameters. Includes validations for start and end times, and ensures a valid starting price.
 
-Key protections:
+\textbf{placeBid}
+\begin{lstlisting}[language=Solidity]
+function placeBid(uint256 tokenId, uint256 bidAmount) public {
+Auction storage auction = auctions[tokenId];
+require(block.timestamp < auction.endTime, "Auction ended");
+require(bidAmount > auction.highestBid, "Bid too low");
+
+paymentToken.transferFrom(msg.sender, address(this), bidAmount);
+
+if (auction.highestBidder != address(0)) {
+    paymentToken.transfer(auction.highestBidder, auction.highestBid);
+}
+
+auction.highestBid = bidAmount;
+auction.highestBidder = msg.sender;
+
+emit BidPlaced(tokenId, msg.sender, bidAmount);
+}
+\end{lstlisting}
+Lets users place a bid on an active auction. Validates bid amount, handles fund transfers, and refunds the previous highest bidder if applicable.
+
+\textbf{claimNFT}
+\begin{lstlisting}[language=Solidity]
+function claimNFT(uint256 tokenId) public {
+Auction storage auction = auctions[tokenId];
+require(msg.sender == auction.highestBidder, "Not winner");
+require(block.timestamp > auction.endTime, "Auction not ended");
+
+nftCollection.transferNFTFrom(address(this), msg.sender, tokenId);
+
+emit NFTClaimed(tokenId, msg.sender);
+}
+\end{lstlisting}
+Allows the highest bidder to claim the NFT after the auction ends. Checks auction status and ensures the correct caller.
+
+\textbf{claimToken}
+\begin{lstlisting}[language=Solidity]
+function claimToken(uint256 tokenId) public {
+Auction storage auction = auctions[tokenId];
+require(msg.sender == auction.seller, "Not seller");
+require(block.timestamp > auction.endTime, "Auction not ended");
+require(auction.highestBidder != address(0), "No bids");
+
+paymentToken.transfer(auction.seller, auction.highestBid);
+
+emit TokenClaimed(tokenId, auction.seller);
+}
+\end{lstlisting}
+Enables the seller to claim the highest bid amount if there is a winning bidder and the auction has concluded.
+
+\textbf{refundNFT}
+\begin{lstlisting}[language=Solidity]
+function refundNFT(uint256 tokenId) public {
+Auction storage auction = auctions[tokenId];
+require(msg.sender == auction.seller, "Not seller");
+require(auction.highestBidder == address(0), "Auction has bids");
+
+nftCollection.transferNFTFrom(address(this), auction.seller, tokenId);
+
+emit NFTRefunded(tokenId, auction.seller);
+}
+\end{lstlisting}
+Allows the seller to retrieve their NFT if no bids were placed during the auction.
+
+\subsection{NFTCollection.sol}
+
+\textbf{mint}
+\begin{lstlisting}[language=Solidity]
+function mint() public {
+uint256 tokenId = _tokenIdCounter.current();
+_tokenIdCounter.increment();
+_safeMint(msg.sender, tokenId);
+}
+\end{lstlisting}
+Mints a new NFT using an auto-incremented token ID and assigns it to the caller.
+
+\textbf{transferNFTFrom}
+\begin{lstlisting}[language=Solidity]
+function transferNFTFrom(address from, address to, uint256 tokenId) public {
+safeTransferFrom(from, to, tokenId);
+}
+\end{lstlisting}
+Transfers an NFT from one address to another using the safeTransferFrom function.
+
+\subsection{PaymentToken.sol}
+
+\textbf{constructor}
+\begin{lstlisting}[language=Solidity]
+constructor() ERC20("USDT Token", "USDT") {
+_mint(msg.sender, 1000000 * 10 ** decimals());
+}
+\end{lstlisting}
+Initializes the token with name and symbol and mints an initial supply to the deployer.
+
+\textbf{mint}
+\begin{lstlisting}[language=Solidity]
+function mint(address to, uint256 amount) public onlyOwner {
+_mint(to, amount);
+}
+\end{lstlisting}
+Enables the owner to mint tokens to any address. Useful for funding bidders during development or testing.
+
+\subsection*{5.2 Bidding}
 \begin{itemize}
-    \item Timestamp validation ensures future end dates
-    \item Positive price check prevents zero bids
-    \item NFT custody transfer to escrow
-    \item Event emission for frontend tracking
+  \item Should reject bid with invalid auction index
+  \item Should reject bid with invalid bid amount
+  \item Should reject bid from auction creator
+  \item Should reject bid if marketplace has no approval for token transfer
+  \item Should reject bid if bidder has insufficient balance
+  \item Should accept valid bid and update balances accordingly
+  \item Should update auction status after successful bid
+  \item Should refund previous bidder after a new bid
 \end{itemize}
 
-\section{Test Cases}
+\subsection*{5.3 NFT Claiming}
+\begin{itemize}
+  \item Should reject NFT claim while auction is still open
+  \item Should reject NFT claim by non-winning bidder
+  \item Should allow winner to claim NFT after auction ends
+  \item Should credit seller with highest bid amount
+  \item Should reject multiple NFT claims
+\end{itemize}
+
+\subsection*{5.4 Token Claiming}
+\begin{itemize}
+  \item Should reject token claim while auction is still open
+  \item Should reject token claim by non-auction-creator
+  \item Should allow auction creator to claim tokens after auction ends
+  \item Should reject multiple token claims
+\end{itemize}
+
+\subsection*{5.5 NFT Refunds}
+\begin{itemize}
+  \item Should reject refund if there is already a bid on the auction
+  \item Should allow refund if there are no bids
+  \item Should return NFT ownership to auction creator after refund
+\end{itemize}
+
+\subsection*{5.6 NFT Collection Functions}
+\begin{itemize}
+  \item Should allow NFT minting
+  \item Should allow NFT transfer from one user to another
+\end{itemize}
 
 \section{Test Results}
 
@@ -300,6 +439,7 @@ NFT Collection contract
 
 34 passing (5s)
 \end{lstlisting}
+
 \subsection{Test Coverage}
 The comprehensive test suite includes 34 cases covering all critical functionality:
 
@@ -466,10 +606,9 @@ The contract address \texttt{0x5fbdb2315678afecb367f032d93f642f64180aa3} success
 
 \section*{Appendix}
 \begin{itemize}
-  \item Forked Repo with Code: \url{https://github.com/AbdelrahmanAyman-dev/NFT-Marketplace-Auction}
+  \item Forked Repo with Code: \url{https://github.com/AbdelrahmanAyman0011/NFT-Marketplace-Auction.git}
   \item Deployment Script: \texttt{scripts/deploy.js}
   \item Tests: \texttt{test/nft.test.js}
-  \item Screenshots: See \texttt{screenshots/} folder in repo
 \end{itemize}
 
 \end{document}

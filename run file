@@ -61,3 +61,11 @@ await Marketplace.createAuction(
   100,                   // السعر الابتدائي
   Math.floor(Date.now() / 1000) + 3600 // انتهاء بعد ساعة
 );
+
+
+
+2. خطأ في نقل NFT في claimNFT
+المشكلة: استخدم _auctionIndex بدل nftId في دالة النقل.
+
+الحل: استبدل _auctionIndex بـ auction.nftId.
+
